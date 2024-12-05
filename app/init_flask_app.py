@@ -89,41 +89,37 @@ model.load_state_dict(torch.load(PATH, map_location=device))
 # ### Predict Image in Flask Web-App
 
 # %%
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 from PIL import Image
 from torchvision.transforms import ToTensor, Normalize
 from io import BytesIO
 import torch
 
-# Define the normalization transform
-normalize = Normalize(mean=[0.5], std=[0.5])  # Assuming input pixel range [0, 255]
+normalize = Normalize(mean=[0.5], std=[0.5])
 
 def init():
     app = Flask(__name__, template_folder='../templates', static_folder='../static')
 
-    # Define route (endpoint) for home page
     @app.route('/', methods=['GET'])
     def home():
         return render_template('index.html')
 
-    # Define route (endpoint) for handling image upload and prediction
     @app.route('/predict', methods=['POST'])
     def predict():
         if 'image' in request.files:
-            # Read and preprocess the uploaded image
             img = Image.open(BytesIO(request.files['image'].read()))
-            img = img.convert('L')  # Convert to grayscale
-            img = img.resize((28, 28))  # Resize image to 28x28
-            img = ToTensor()(img).unsqueeze(0)  # Convert to tensor and add batch dimension
-            img = normalize(img)  # Apply normalization
+            img = img.convert('L')
+            img = img.resize((28, 28))
+            img = ToTensor()(img).unsqueeze(0)
+            img = normalize(img)
 
             with torch.no_grad():
                 output = model(img)
                 _, predicted = torch.max(output, 1)
                 prediction = predicted.item()
 
-                return render_template('result.html', prediction=prediction)
+                return jsonify({'prediction': prediction})
         else:
-            return 'Error: No image provided.'
+            return jsonify({'error': 'No image provided.'}), 400
 
     return app
