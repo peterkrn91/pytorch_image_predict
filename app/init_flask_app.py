@@ -89,11 +89,73 @@ model.load_state_dict(torch.load(PATH, map_location=device))
 # ### Predict Image in Flask Web-App
 
 # %%
+# from flask import Flask, render_template, request, jsonify
+# from PIL import Image
+# from torchvision.transforms import ToTensor, Normalize
+# from io import BytesIO
+# import torch
+
+# normalize = Normalize(mean=[0.5], std=[0.5])
+
+# def init():
+#     app = Flask(__name__, template_folder='../templates', static_folder='../static')
+
+#     @app.route('/', methods=['GET'])
+#     def home():
+#         return render_template('index.html')
+
+#     @app.route('/predict', methods=['POST'])
+#     def predict():
+#         if 'image' in request.files:
+#             img = Image.open(BytesIO(request.files['image'].read()))
+#             img = img.convert('L')
+#             img = img.resize((28, 28))
+#             img = ToTensor()(img).unsqueeze(0)
+#             img = normalize(img)
+
+#             with torch.no_grad():
+#                 output = model(img)
+#                 _, predicted = torch.max(output, 1)
+#                 prediction = predicted.item()
+
+#                 return jsonify({'prediction': prediction})
+#         else:
+#             return jsonify({'error': 'No image provided.'}), 400
+
+#     return app
+# %%
+import base64
 from flask import Flask, render_template, request, jsonify
 from PIL import Image
+from torchvision import models
 from torchvision.transforms import ToTensor, Normalize
-from io import BytesIO
 import torch
+from io import BytesIO
+
+class SimpleCNN(torch.nn.Module):
+    def __init__(self):
+        super(SimpleCNN, self).__init__()
+        self.conv1 = torch.nn.Conv2d(1, 32, kernel_size=3, padding=1)
+        self.conv2 = torch.nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        self.fc1 = torch.nn.Linear(64 * 7 * 7, 512)  
+        self.fc2 = torch.nn.Linear(512, 10)  
+
+    def forward(self, x):
+        x = torch.relu(self.conv1(x))
+        x = torch.max_pool2d(x, kernel_size=2, stride=2)
+        x = torch.relu(self.conv2(x))
+        x = torch.max_pool2d(x, kernel_size=2, stride=2)
+        x = x.view(x.size(0), -1)  
+        x = torch.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
+
+
+model = SimpleCNN()
+
+
+model.load_state_dict(torch.load('trained_model_acc_90.pth', map_location=torch.device('cpu')))
+model.eval()  
 
 normalize = Normalize(mean=[0.5], std=[0.5])
 
@@ -106,12 +168,13 @@ def init():
 
     @app.route('/predict', methods=['POST'])
     def predict():
-        if 'image' in request.files:
-            img = Image.open(BytesIO(request.files['image'].read()))
-            img = img.convert('L')
-            img = img.resize((28, 28))
-            img = ToTensor()(img).unsqueeze(0)
-            img = normalize(img)
+        data = request.get_json()
+        if 'image' in data:
+            image_data = base64.b64decode(data['image'].split(',')[1])
+            img = Image.open(BytesIO(image_data)).convert('L') 
+            img = img.resize((28, 28))  
+            img = ToTensor()(img).unsqueeze(0)  
+            img = normalize(img)  
 
             with torch.no_grad():
                 output = model(img)
@@ -123,3 +186,4 @@ def init():
             return jsonify({'error': 'No image provided.'}), 400
 
     return app
+# %%

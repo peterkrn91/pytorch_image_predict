@@ -1,29 +1,48 @@
-document.getElementById('upload-form').addEventListener('submit', async function (e) {
-  e.preventDefault();
-  const fileInput = document.getElementById('image');
-  if (!fileInput.files.length) {
-    alert('Please upload an image!');
-    return;
-  }
+const videoElement = document.getElementById('video');
+const canvas = document.createElement('canvas');
+const context = canvas.getContext('2d');
 
-  const formData = new FormData();
-  formData.append('image', fileInput.files[0]);
+navigator.mediaDevices.getUserMedia({ video: true })
+  .then((stream) => {
+    videoElement.srcObject = stream;
+    videoElement.play();
+  })
+  .catch((err) => {
+    alert('Error accessing webcam: ' + err);
+  });
+
+
+canvas.width = 640;  
+canvas.height = 480; 
+
+async function captureAndPredict() {
+  context.clearRect(0, 0, canvas.width, canvas.height);
+
+  context.save(); 
+  context.scale(-1, 1); 
+  context.drawImage(videoElement, -canvas.width, 0, canvas.width, canvas.height); 
+  context.restore(); 
+
+  const imageData = canvas.toDataURL('image/png');
 
   try {
     const response = await fetch('/predict', {
       method: 'POST',
-      body: formData,
+      body: JSON.stringify({ image: imageData }),
+      headers: {
+        'Content-Type': 'application/json'
+      }
     });
-
     if (response.ok) {
       const result = await response.json();
       document.getElementById('result-container').classList.remove('hidden');
       document.getElementById('prediction').textContent = result.prediction;
     } else {
-      alert('Failed to process the image. Please try again.');
+      console.error('Failed to process the image. Please try again.');
     }
   } catch (error) {
     console.error('Error:', error);
-    alert('An error occurred. Please try again later.');
   }
-});
+  requestAnimationFrame(captureAndPredict);
+}
+requestAnimationFrame(captureAndPredict);
